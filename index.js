@@ -82,7 +82,7 @@ const initHttpServer = () => {
 	app.use(bodyParser.json({ limit: '50mb' }))
 	app.use(bodyParser.urlencoded({ limit: '50mb', extended: false, parameterLimit: 50000 }))
 
-	app.get('/blocks', (req, res) => res.send(JSON.stringify(blockchain)))
+	app.get('/blocks', (req, res) => res.send({ success: true, data: JSON.stringify(blockchain) }))
 
 	app.post('/mineblock', (req, res) => {
 		const newBlock = generateNextBlock(req.body.data)
@@ -93,7 +93,7 @@ const initHttpServer = () => {
 	})
 
 	app.get('/peers', (req, res) => {
-		res.send(sockets.map(s => s._socket.remoteAddress + ':' + s._socket.remotePort))
+		res.send({ success: true, data: sockets.map(s => s._socket.remoteAddress + ':' + s._socket.remotePort) })
 	})
 
 	app.post('/add-peer', (req, res) => {

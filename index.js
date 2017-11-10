@@ -101,7 +101,7 @@ const initHttpServer = () => {
 		res.send({ success: true, data: req.body.peer })
 	})
 
-	app.listen(httpPort, () => console.log('Listening to port', httpPort))
+	app.listen(httpPort, () => console.log('Listening to port: ', httpPort))
 }
 
 /*

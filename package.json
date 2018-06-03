@@ -1,22 +1,30 @@
 {
-  "name": "blockchainapp",
+  "name": "Solocoin",
   "version": "1.0.0",
   "main": "index.js",
-  "author": "madhav",
   "license": "MIT",
-  "scripts": {
-    "start": "nodemon index.js --exec babel-node --presets es2015,stage-2"
-  },
   "dependencies": {
-    "body-parser": "^1.18.2",
+    "axios": "^0.18.0",
+    "body-parser": "^1.18.3",
+    "cross-env": "^5.1.6",
     "crypto-js": "^3.1.9-1",
-    "express": "^4.16.2",
-    "ws": "^3.3.0"
+    "express": "^4.16.3",
+    "lodash": "^4.17.10",
+    "ts-node": "^6.0.5",
+    "typescript": "^2.9.1",
+    "ws": "^5.2.0"
+  },
+  "scripts": {
+    "start": "nodemon ./build/index.js",
+    "tsc": "tsc"
   },
   "devDependencies": {
-    "babel-cli": "^6.26.0",
-    "babel-preset-es2015": "^6.24.1",
-    "babel-preset-stage-2": "^6.24.1",
-    "nodemon": "^1.12.1"
+    "@types/body-parser": "^1.17.0",
+    "@types/crypto-js": "^3.1.40",
+    "@types/es6-shim": "^0.31.37",
+    "@types/express": "^4.11.1",
+    "@types/node": "^10.3.0",
+    "@types/ws": "^5.1.1",
+    "nodemon": "^1.17.5"
   }
 }

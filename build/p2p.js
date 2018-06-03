@@ -38,7 +38,6 @@ var JSONToObject = function (data) {
         return JSON.parse(data);
     }
     catch (e) {
-        console.log(e);
         return null;
     }
 };

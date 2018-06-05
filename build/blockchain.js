@@ -4,8 +4,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 var crypto_js_1 = __importDefault(require("crypto-js"));
+var lodash_1 = __importDefault(require("lodash"));
 var p2p_1 = require("./p2p");
+var transaction_1 = require("./transaction");
+var transactionPool_1 = require("./transactionPool");
 var utils_1 = require("./utils");
+var wallet_1 = require("./wallet");
 // Block Definition
 var Block = /** @class */ (function () {
     function Block(index, hash, previousHash, timestamp, data, difficulty, nonce) {
@@ -20,20 +24,40 @@ var Block = /** @class */ (function () {
     return Block;
 }());
 exports.Block = Block;
+// genesis Transaction
+var genesisTransaction = {
+    txIns: [{ signature: "", txOutId: "", txOutIndex: 0 }],
+    txOuts: [
+        {
+            address: "04bfcab8722991ae774db48f934ca79cfb7dd991229153b9f732ba5334aafcd8e7266e47076996b55a14bf9913ee3145ce0cfc1372ada8ada74bd287450313534a",
+            amount: 50
+        }
+    ],
+    id: "e655f6a5f26dc9b4cac6e46f52336428287759cf81ef5ff10854f69d68f43fa3"
+};
 // Genesis Block: 1st block
-var genesisBlock = new Block(0, "816534932c2b7154836da6afc367695e6337db8a921823784c14378abed4f7d7", "0", 1465154705, "GENESIS BLOCK", 10, 0);
+var genesisBlock = new Block(0, "816534932c2b7154836da6afc367695e6337db8a921823784c14378abed4f7d7", "0", 1465154705, [genesisTransaction], 10, 0);
 // defines how often a block should be found, 10 Minutes
 var BLOCK_GENERATION_INTERVAL = 10;
 // defines how often the difficulty should adjust to the increasing or decreasing network hashrate.
 var DIFFICULTY_ADJUSTMENT_INTERVAL = 10;
 // The Main BlockChain
 var blockchain = [genesisBlock];
+// Unspent Transaction outputs
+var unspentTxOuts = transaction_1.processTransactions(blockchain[0].data, [], 0);
 // get the last block
 var getLatestBlock = function () { return blockchain[blockchain.length - 1]; };
 exports.getLatestBlock = getLatestBlock;
 // Get the blockchain
 var getBlockchain = function () { return blockchain; };
 exports.getBlockchain = getBlockchain;
+var getUnspentTxOuts = function () { return lodash_1.default.cloneDeep(unspentTxOuts); };
+exports.getUnspentTxOuts = getUnspentTxOuts;
+// and txPool should be only updated at the same time
+var setUnspentTxOuts = function (newUnspentTxOut) {
+    console.log("replacing unspentTxouts with: %s", newUnspentTxOut);
+    unspentTxOuts = newUnspentTxOut;
+};
 // Get current timestamp
 var getCurrentTimestamp = function () {
     return Math.round(new Date().getTime() / 1000);
@@ -50,7 +74,7 @@ var addBlock = function (newBlock) {
 };
 // Get Difficulty Value in each interval
 var getDifficulty = function (aBlockchain) {
-    var latestBlock = aBlockchain[aBlockchain.length - 1];
+    var latestBlock = aBlockchain[blockchain.length - 1];
     if (latestBlock.index % DIFFICULTY_ADJUSTMENT_INTERVAL === 0 &&
         latestBlock.index !== 0) {
         return getAdjustedDifficulty(latestBlock, aBlockchain);
@@ -61,7 +85,7 @@ var getDifficulty = function (aBlockchain) {
 };
 // Adjust difficilty Value
 var getAdjustedDifficulty = function (latestBlock, aBlockchain) {
-    var prevAdjustmentBlock = aBlockchain[aBlockchain.length - DIFFICULTY_ADJUSTMENT_INTERVAL];
+    var prevAdjustmentBlock = aBlockchain[blockchain.length - DIFFICULTY_ADJUSTMENT_INTERVAL];
     var timeExpected = BLOCK_GENERATION_INTERVAL * DIFFICULTY_ADJUSTMENT_INTERVAL;
     var timeTaken = latestBlock.timestamp - prevAdjustmentBlock.timestamp;
     if (timeTaken < timeExpected / 2) {
@@ -74,19 +98,47 @@ var getAdjustedDifficulty = function (latestBlock, aBlockchain) {
         return prevAdjustmentBlock.difficulty;
     }
 };
-// Generate the next Block, add and broadcast
-var generateNextBlock = function (blockData) {
+var getMyUnspentTransactionOutputs = function () {
+    return wallet_1.findUnspentTxOuts(wallet_1.getPublicFromWallet(), getUnspentTxOuts());
+};
+exports.getMyUnspentTransactionOutputs = getMyUnspentTransactionOutputs;
+// Generate the next Raw Block, add and broadcast
+var generateRawNextBlock = function (blockData) {
     var previousBlock = getLatestBlock();
-    var difficilty = getDifficulty(getBlockchain());
-    console.log("[^] Difficulty: ", difficilty);
+    var difficulty = getDifficulty(getBlockchain());
     var nextIndex = previousBlock.index + 1;
     var nextTimestamp = getCurrentTimestamp();
-    var newBlock = findBlock(nextIndex, previousBlock.hash, nextTimestamp, blockData, difficilty);
-    addBlock(newBlock);
-    p2p_1.broadcastLatest();
-    return newBlock;
+    var newBlock = findBlock(nextIndex, previousBlock.hash, nextTimestamp, blockData, difficulty);
+    if (addBlockToChain(newBlock)) {
+        p2p_1.broadcastLatest();
+        return newBlock;
+    }
+    else {
+        return null;
+    }
+};
+exports.generateRawNextBlock = generateRawNextBlock;
+// Generate Next Block
+var generateNextBlock = function () {
+    var coinbaseTx = transaction_1.getCoinbaseTransaction(wallet_1.getPublicFromWallet(), getLatestBlock().index + 1);
+    var blockData = [coinbaseTx].concat(transactionPool_1.getTransactionPool());
+    return generateRawNextBlock(blockData);
 };
 exports.generateNextBlock = generateNextBlock;
+// Generate Next block with Transaction
+var generateNextBlockWithTransaction = function (receiverAddress, amount) {
+    if (!transaction_1.isValidAddress(receiverAddress)) {
+        throw Error("invalid address");
+    }
+    if (typeof amount !== "number") {
+        throw Error("invalid amount");
+    }
+    var coinbaseTx = transaction_1.getCoinbaseTransaction(wallet_1.getPublicFromWallet(), getLatestBlock().index + 1);
+    var tx = wallet_1.createTransaction(receiverAddress, amount, wallet_1.getPrivateFromWallet(), getUnspentTxOuts(), transactionPool_1.getTransactionPool());
+    var blockData = [coinbaseTx, tx];
+    return generateRawNextBlock(blockData);
+};
+exports.generateNextBlockWithTransaction = generateNextBlockWithTransaction;
 // Finding the valid block by adjusting nonce value
 var findBlock = function (index, previousHash, timestamp, data, difficulty) {
     var nonce = 0;
@@ -98,6 +150,17 @@ var findBlock = function (index, previousHash, timestamp, data, difficulty) {
         nonce++;
     }
 };
+var getAccountBalance = function () {
+    return wallet_1.getBalance(wallet_1.getPublicFromWallet(), getUnspentTxOuts());
+};
+exports.getAccountBalance = getAccountBalance;
+var sendTransaction = function (address, amount) {
+    var tx = wallet_1.createTransaction(address, amount, wallet_1.getPrivateFromWallet(), getUnspentTxOuts(), transactionPool_1.getTransactionPool());
+    transactionPool_1.addToTransactionPool(tx, getUnspentTxOuts());
+    p2p_1.broadCastTransactionPool();
+    return tx;
+};
+exports.sendTransaction = sendTransaction;
 // calculating hash for a block
 var calculateHashForBlock = function (block) {
     return calculateHash(block.index, block.previousHash, block.timestamp, block.data, block.difficulty, block.nonce);
@@ -109,16 +172,23 @@ var isValidTimestamp = function (newBlock, previousBlock) {
 };
 // Validate the new block
 var isValidNewBlock = function (newBlock, previousBlock) {
+    if (!isValidBlockStructure(newBlock)) {
+        console.log("invalid block structure: %s", JSON.stringify(newBlock));
+        return false;
+    }
     if (previousBlock.index + 1 !== newBlock.index) {
-        console.log("Invalid Block index");
+        console.log("invalid index");
         return false;
     }
-    if (previousBlock.hash !== newBlock.previousHash) {
-        console.log("Invalid Previous Block Hash");
+    else if (previousBlock.hash !== newBlock.previousHash) {
+        console.log("invalid previoushash");
         return false;
     }
-    if (calculateHashForBlock(newBlock) !== newBlock.hash) {
-        console.log("Invalid Hash");
+    else if (!isValidTimestamp(newBlock, previousBlock)) {
+        console.log("invalid timestamp");
+        return false;
+    }
+    else if (!hasValidHash(newBlock)) {
         return false;
     }
     return true;
@@ -129,7 +199,7 @@ var isValidBlockStructure = function (block) {
         typeof block.hash === "string" &&
         typeof block.previousHash === "string" &&
         typeof block.timestamp === "number" &&
-        typeof block.data === "string");
+        typeof block.data === "object");
 };
 exports.isValidBlockStructure = isValidBlockStructure;
 // validating hash
@@ -159,24 +229,47 @@ var hashMatchesDifficulty = function (hash, difficulty) {
 };
 // Validating block chain
 var isValidChain = function (blockchainToValidate) {
+    console.log("isValidChain:");
+    console.log(JSON.stringify(blockchainToValidate));
     var isValidGenesis = function (block) {
         return JSON.stringify(block) === JSON.stringify(genesisBlock);
     };
     if (!isValidGenesis(blockchainToValidate[0])) {
-        return false;
+        return null;
     }
-    for (var i = 1; i < blockchainToValidate.length; i++) {
-        if (!isValidNewBlock(blockchainToValidate[i], blockchainToValidate[i - 1])) {
-            return false;
+    /*
+    Validate each block in the chain. The block is valid if the block structure is valid
+      and the transaction are valid
+     */
+    var aUnspentTxOuts = [];
+    for (var i = 0; i < blockchainToValidate.length; i++) {
+        var currentBlock = blockchainToValidate[i];
+        if (i !== 0 &&
+            !isValidNewBlock(blockchainToValidate[i], blockchainToValidate[i - 1])) {
+            return null;
+        }
+        aUnspentTxOuts = transaction_1.processTransactions(currentBlock.data, aUnspentTxOuts, currentBlock.index);
+        if (aUnspentTxOuts === null) {
+            console.log("invalid transactions in blockchain");
+            return null;
         }
     }
-    return true;
+    return aUnspentTxOuts;
 };
 // Adding block to bhockchain
 var addBlockToChain = function (newBlock) {
     if (isValidNewBlock(newBlock, getLatestBlock())) {
-        blockchain.push(newBlock);
-        return true;
+        var retVal = transaction_1.processTransactions(newBlock.data, getUnspentTxOuts(), newBlock.index);
+        if (retVal === null) {
+            console.log("block is not valid in terms of transactions");
+            return false;
+        }
+        else {
+            blockchain.push(newBlock);
+            setUnspentTxOuts(retVal);
+            transactionPool_1.updateTransactionPool(unspentTxOuts);
+            return true;
+        }
     }
     return false;
 };
@@ -190,11 +283,15 @@ var getAccumulatedDifficulty = function (aBlockchain) {
 };
 // replacing the blockchain
 var replaceChain = function (newBlocks) {
-    if (isValidChain(newBlocks) &&
+    var aUnspentTxOuts = isValidChain(newBlocks);
+    var validChain = aUnspentTxOuts !== null;
+    if (validChain &&
         getAccumulatedDifficulty(newBlocks) >
             getAccumulatedDifficulty(getBlockchain())) {
         console.log("Received blockchain is valid. Replacing current blockchain with received blockchain");
         blockchain = newBlocks;
+        setUnspentTxOuts(aUnspentTxOuts);
+        transactionPool_1.updateTransactionPool(unspentTxOuts);
         p2p_1.broadcastLatest();
     }
     else {
@@ -202,3 +299,7 @@ var replaceChain = function (newBlocks) {
     }
 };
 exports.replaceChain = replaceChain;
+var handleReceivedTransaction = function (transaction) {
+    transactionPool_1.addToTransactionPool(transaction, getUnspentTxOuts());
+};
+exports.handleReceivedTransaction = handleReceivedTransaction;

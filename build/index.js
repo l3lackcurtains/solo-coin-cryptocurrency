@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 var express_1 = __importDefault(require("express"));
 var body_parser_1 = __importDefault(require("body-parser"));
+var lodash_1 = __importDefault(require("lodash"));
 var blockchain_1 = require("./blockchain");
 var p2p_1 = require("./p2p");
 var transactionPool_1 = require("./transactionPool");
@@ -14,13 +15,28 @@ var p2pPort = process.env.P2P_PORT || 6001;
 var initHttpServer = function (httpPort) {
     var app = express_1.default();
     app.use(body_parser_1.default.json());
-    app.use(function (err, req, res, next) {
+    app.use(function (err, req, res) {
         if (err) {
             res.status(400).send(err.message);
         }
     });
     app.get("/blocks", function (req, res) {
         res.send(blockchain_1.getBlockchain());
+    });
+    app.get("/block/:hash", function (req, res) {
+        var block = lodash_1.default.find(blockchain_1.getBlockchain(), { hash: req.params.hash });
+        res.send(block);
+    });
+    app.get("/transaction/:id", function (req, res) {
+        var tx = lodash_1.default(blockchain_1.getBlockchain())
+            .map(function (blocks) { return blocks.data; })
+            .flatten()
+            .find({ id: req.params.id });
+        res.send(tx);
+    });
+    app.get("/address/:address", function (req, res) {
+        var unspentTxOuts = lodash_1.default.filter(blockchain_1.getUnspentTxOuts(), function (uTxO) { return uTxO.address === req.params.address; });
+        res.send({ unspentTxOuts: unspentTxOuts });
     });
     app.get("/unspentTransactionOutputs", function (req, res) {
         res.send(blockchain_1.getUnspentTxOuts());

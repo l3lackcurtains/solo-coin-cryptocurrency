@@ -1,5 +1,6 @@
 import express from "express";
 import bodyParser from "body-parser";
+import _ from "lodash";
 
 import {
   Block,
@@ -23,7 +24,7 @@ const initHttpServer = (httpPort: any) => {
   const app: express.Application = express();
   app.use(bodyParser.json());
 
-  app.use((err: any, req: any, res: any, next: any) => {
+  app.use((err: any, req: any, res: any) => {
     if (err) {
       res.status(400).send(err.message);
     }
@@ -31,6 +32,27 @@ const initHttpServer = (httpPort: any) => {
 
   app.get("/blocks", (req, res) => {
     res.send(getBlockchain());
+  });
+
+  app.get("/block/:hash", (req, res) => {
+    const block = _.find(getBlockchain(), { hash: req.params.hash });
+    res.send(block);
+  });
+
+  app.get("/transaction/:id", (req, res) => {
+    const tx = _(getBlockchain())
+      .map(blocks => blocks.data)
+      .flatten()
+      .find({ id: req.params.id });
+    res.send(tx);
+  });
+
+  app.get("/address/:address", (req, res) => {
+    const unspentTxOuts: any = _.filter(
+      getUnspentTxOuts(),
+      uTxO => uTxO.address === req.params.address
+    );
+    res.send({ unspentTxOuts: unspentTxOuts });
   });
 
   app.get("/unspentTransactionOutputs", (req, res) => {

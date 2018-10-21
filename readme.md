@@ -3,7 +3,9 @@
 <b>Minimal Cryptocurrency implemented in NodeJS.
 </b>
 
-- <b>Run two commands in parallel to run the program</b>
+---
+
+Run two commands in parallel to run the program
 
 ```bash
 yarn start
